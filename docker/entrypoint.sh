@@ -2,15 +2,19 @@
 set -ef
 
 if [ -n "${DNSSHIELD_LISTEN:-}" ]; then
-    for addr in ${DNSSHIELD_LISTEN}; do
-        set -- --listen "$addr" "$@"
-    done
+    set -- --listen "${DNSSHIELD_LISTEN}" "$@"
 fi
 
-if [ -n "${DNSSHIELD_HTTPS_LISTEN:-}" ]; then
-    for addr in ${DNSSHIELD_HTTPS_LISTEN}; do
-        set -- --https-listen "$addr" "$@"
-    done
+if [ -n "${DNSSHIELD_DOT_PORT:-}" ]; then
+    set -- --dot-port "${DNSSHIELD_DOT_PORT}" "$@"
+fi
+
+if [ -n "${DNSSHIELD_DOQ_PORT:-}" ]; then
+    set -- --doq-port "${DNSSHIELD_DOQ_PORT}" "$@"
+fi
+
+if [ -n "${DNSSHIELD_DOH_PORT:-}" ]; then
+    set -- --doh-port "${DNSSHIELD_DOH_PORT}" "$@"
 fi
 
 if [ -n "${DNSSHIELD_PROTO:-}" ]; then
