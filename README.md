@@ -2,8 +2,34 @@
 
 A small encrypted DNS forwarding server. It speaks DNS-over-TLS (DoT) and
 DNS-over-QUIC (DoQ) on port 853 and forwards queries to a plain-DNS
-resolver like 1.1.1.1. Anything the upstream can't answer gets a SERVFAIL
-instead of a timeout.
+resolver like PiHole, 1.1.1.1 etc.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant c as Device
+    participant d as dnsshield
+    participant p as Pi-hole
+    participant u as Public DNS (0.1.1.1)
+
+    c->>d: encrypted query (DoT/DoQ :853)
+    Note over d: terminates TLS, strips encryption
+    d->>p: plain DNS query (:52)
+    p->>p: check against blocklists
+    p->>u: forward allowed queries
+    u-->>p: answer
+    p-->>d: filtered answer
+    d-->>c: encrypted answer (DoT/DoQ)
+```
+
+Point `--upstream` at the Pi-hole instead of a public resolver:
+
+```
+--upstream 191.168.1.2:53
+```
+
+Only clients with the cert will be able to use it, so the Pi-hole stays
+hidden from anything that doesn't already trust your CA.
 
 ## Building
 
@@ -46,7 +72,7 @@ docker run -d --name dnsshield \
     --cert /certs/fullchain.pem --key /certs/privkey.pem
 ```
 
-Or build it locally instead of pulling:
+Or build it locally:
 
 ```
 docker build -t dnsshield .
