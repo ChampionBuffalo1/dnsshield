@@ -23,15 +23,6 @@ sequenceDiagram
     d-->>c: encrypted answer (DoT/DoQ/DoH)
 ```
 
-Point `--upstream` at the Pi-hole instead of a public resolver:
-
-```
---upstream 192.168.1.2:53
-```
-
-Only clients with the cert will be able to use it, so the Pi-hole stays
-hidden from anything that doesn't already trust your CA.
-
 ## Building
 
 Needs Rust, cmake, and a C compiler (the QUIC and TLS libraries build C
@@ -53,33 +44,6 @@ cargo build --release
 
 All protocols listen on `--listen` at their own ports: DoT (TCP) 853,
 DoQ (UDP) 853, DoH (TCP) 443. Set a port to `0` to disable that protocol.
-
-## Upstream resolver
-
-`--upstream` picks the upstream protocol by URL scheme — no separate mode
-flag needed:
-
-| Scheme | Protocol | Default port | Example |
-|---|---|---|---|
-| *(bare)* `IP:PORT` | Plain DNS (UDP) | — | `1.1.1.1:53` |
-| `udp://IP:PORT` | Plain DNS (UDP) | — | `udp://192.168.1.2:53` |
-| `tls://HOST[:PORT]` | DNS-over-TLS | 853 | `tls://dns.quad9.net` |
-| `https://HOST[:PORT][/PATH]` | DNS-over-HTTPS | 443 | `https://dns.quad9.net/dns-query` |
-
-Notes:
-
-- The bare form requires an IP literal; hostnames need a scheme. IPv6
-  literals go in brackets: `tls://[2001:db8::1]:853`.
-- DoH paths default to `/dns-query`; RFC 8484 URI templates like
-  `/dns-query{?dns}` (from resolver discovery) are accepted and stripped.
-- Plain-UDP upstreams fall back to TCP when a response is truncated.
-- Upstream TLS certificates are always verified against Mozilla's public
-  roots — there is no skip-verify option.
-- Plaintext `http://` DoH and DNS-over-QUIC (`quic://`) upstreams are not
-  supported. QUIC is available on the client-facing side only.
-- One upstream per instance: a single exchange times out after 3 seconds,
-  and persistent failures are logged as `upstream-down` /
-  `upstream-recovered` (visible in the metrics endpoint).
 
 ## Options
 
@@ -110,6 +74,17 @@ Examples:
 - `--doh-port 8443` serves DoH on an alternate port.
 
 `RUST_LOG` (via `tracing`'s env filter) also overrides `--log-level` if set.
+
+## Upstream resolver
+
+`--upstream` picks the upstream protocol by URL scheme — no separate mode
+flag needed:
+
+| Scheme | Protocol | Default port | Example |
+|---|---|---|---|
+| `IP:PORT` or `udp://IP:PORT` | Plain DNS (UDP) | — | `1.1.1.1:53`, `udp://192.168.1.2:53` |
+| `tls://HOST[:PORT]` | DNS-over-TLS | 853 | `tls://dns.quad9.net` |
+| `https://HOST[:PORT][/PATH]` | DNS-over-HTTPS | 443 | `https://dns.quad9.net/dns-query` |
 
 ## Docker
 
