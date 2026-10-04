@@ -30,7 +30,10 @@ impl Proto {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UpstreamSpec {
     Udp(SocketAddr),
-    Dot { host: String, port: u16 },
+    Dot {
+        host: String,
+        port: u16,
+    },
     Doh {
         host: String,
         port: u16,
