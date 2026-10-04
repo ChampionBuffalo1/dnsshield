@@ -211,12 +211,16 @@ mod tests {
         metrics.conn_opened(Proto::Dot);
         let body = render(&metrics);
 
+        let build_info_line = format!(
+            "dnsshield_build_info{{version=\"{}\"}} 1",
+            env!("CARGO_PKG_VERSION")
+        );
         for expected in [
             "# TYPE dnsshield_queries_total counter",
             "dnsshield_queries_total{proto=\"dot\"} 0",
             "dnsshield_queries_total{proto=\"doq\"} 1",
             "dnsshield_up 1",
-            "dnsshield_build_info{version=\"0.1.0\"} 1",
+            build_info_line.as_str(),
             "dnsshield_active_connections{proto=\"dot\"} 1",
             "dnsshield_upstream_latency_seconds_bucket{proto=\"doq\"",
         ] {
