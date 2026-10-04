@@ -1,92 +1,57 @@
+use std::collections::VecDeque;
 use std::net::SocketAddr;
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
-use anyhow::{Result, bail};
-use hickory_proto::op::{Message, ResponseCode};
+use anyhow::{Context, Result, bail};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpStream, UdpSocket};
 use tokio::time::timeout;
 use tracing::debug;
 
-pub const MAX_DNS_MESSAGE: usize = u16::MAX as usize;
-// A DNS header is fixed-size: ID, flags, and the four count fields
-// (question/answer/authority/additional), 2 bytes each — 12 total.
-const MIN_DNS_MESSAGE: usize = 12;
+use crate::limits::{Governance, Throttle};
+use crate::metrics::{Metrics, Proto};
+use crate::util::{MAX_DNS_MESSAGE, MIN_DNS_MESSAGE, encode_frame, is_truncated, query_id};
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum Frame {
-    Complete(Vec<u8>),
-    Invalid,
-    Incomplete,
-}
+const UDP_POOL_SIZE: usize = 64;
 
-pub fn take_frame(buf: &mut Vec<u8>) -> Frame {
-    if buf.len() < 2 {
-        return Frame::Incomplete;
-    }
-    let len = u16::from_be_bytes([buf[0], buf[1]]) as usize;
-    if len < MIN_DNS_MESSAGE {
-        return Frame::Invalid;
-    }
-    if buf.len() < 2 + len {
-        return Frame::Incomplete;
-    }
-    let msg = buf[2..2 + len].to_vec();
-    buf.drain(..2 + len);
-    Frame::Complete(msg)
-}
-
-pub fn encode_frame(msg: &[u8]) -> Vec<u8> {
-    let mut frame = Vec::with_capacity(2 + msg.len());
-    frame.extend_from_slice(&(msg.len() as u16).to_be_bytes());
-    frame.extend_from_slice(msg);
-    frame
-}
-
-pub fn describe_query(query: &[u8]) -> String {
-    match Message::from_vec(query) {
-        Ok(msg) => match msg.queries.first() {
-            Some(q) => format!("{} {}", q.name(), q.query_type()),
-            None => "<no question>".to_string(),
-        },
-        Err(_) => "<malformed query>".to_string(),
-    }
-}
-
-pub fn servfail(query: &[u8]) -> Option<Vec<u8>> {
-    let msg = Message::from_vec(query).ok()?;
-    let mut resp = Message::error_msg(
-        msg.metadata.id,
-        msg.metadata.op_code,
-        ResponseCode::ServFail,
-    );
-    for q in &msg.queries {
-        resp.add_query(q.clone());
-    }
-    resp.to_vec().ok()
-}
-
-#[derive(Clone, Debug)]
 pub struct Upstream {
     addr: SocketAddr,
     udp_timeout: Duration,
     tcp_timeout: Duration,
+    /// Already-connected UDP sockets to the upstream, ready for reuse.
+    pool: Mutex<VecDeque<UdpSocket>>,
+    healthy: AtomicBool,
+    metrics: Arc<Metrics>,
+    throttle: Arc<Throttle>,
 }
 
 impl Upstream {
-    pub fn new(addr: SocketAddr) -> Self {
+    pub fn new(addr: SocketAddr, gov: &Governance) -> Self {
         Self {
             addr,
             udp_timeout: Duration::from_secs(1),
             tcp_timeout: Duration::from_secs(3),
+            pool: Mutex::new(VecDeque::with_capacity(UDP_POOL_SIZE)),
+            healthy: AtomicBool::new(true),
+            metrics: Arc::clone(&gov.metrics),
+            throttle: Arc::clone(&gov.throttle),
         }
     }
 
-    pub async fn resolve(&self, query: &[u8]) -> Result<Vec<u8>> {
+    pub async fn resolve(&self, proto: Proto, query: &[u8]) -> Result<Vec<u8>> {
         if query.len() < MIN_DNS_MESSAGE {
             bail!("query shorter than a DNS header");
         }
+        self.metrics.note_query(proto);
+        let started = Instant::now();
+        let result = self.resolve_inner(query).await;
+        self.note_health(proto, &result, started.elapsed());
+        result
+    }
 
+    async fn resolve_inner(&self, query: &[u8]) -> Result<Vec<u8>> {
         for _ in 0..2 {
             match timeout(self.udp_timeout, self.resolve_udp(query)).await {
                 Ok(Ok(resp)) if is_truncated(&resp) => break, // TC set: redo over TCP
@@ -98,23 +63,57 @@ impl Upstream {
         self.resolve_tcp(query).await
     }
 
+    fn note_health(&self, proto: Proto, result: &Result<Vec<u8>>, latency: Duration) {
+        self.metrics.note_answer(proto, latency, result.is_ok());
+        let addr = self.addr;
+        let throttle = &self.throttle;
+        match result {
+            Ok(_) => {
+                if !self.healthy.swap(true, Ordering::Relaxed) {
+                    throttle.info("upstream-recovered", move || {
+                        format!("upstream {addr} is healthy again")
+                    });
+                }
+            }
+            Err(e) => {
+                if self.healthy.swap(false, Ordering::Relaxed) {
+                    throttle.warn("upstream-down", move || {
+                        format!("upstream {addr} is failing: {e:#}")
+                    });
+                }
+            }
+        }
+    }
+
     async fn resolve_udp(&self, query: &[u8]) -> Result<Vec<u8>> {
+        let socket = self.checkout_udp().await?;
+        // Only re-pool sockets that answered; a timed-out or errored socket
+        // may still receive a late response, so it is dropped instead.
+        let result = udp_exchange(&socket, query).await;
+        if result.is_ok() {
+            let mut pool = self.pool.lock().unwrap();
+            if pool.len() < UDP_POOL_SIZE {
+                pool.push_back(socket);
+            }
+        }
+        result
+    }
+
+    async fn checkout_udp(&self) -> Result<UdpSocket> {
+        if let Some(socket) = self.pool.lock().unwrap().pop_front() {
+            // Discard anything queued for a previous query so a late
+            // response can't be mistaken for this one's answer.
+            let mut stale = [0u8; 4096];
+            while socket.try_recv_from(&mut stale).is_ok() {}
+            return Ok(socket);
+        }
         let bind_addr = match self.addr {
             SocketAddr::V4(_) => "0.0.0.0:0",
             SocketAddr::V6(_) => "[::]:0",
         };
         let socket = UdpSocket::bind(bind_addr).await?;
         socket.connect(self.addr).await?;
-        socket.send(query).await?;
-
-        let mut buf = vec![0u8; MAX_DNS_MESSAGE];
-        loop {
-            let n = socket.recv(&mut buf).await?;
-            if n >= MIN_DNS_MESSAGE && buf[..2] == query[..2] {
-                return Ok(buf[..n].to_vec());
-            }
-            debug!("ignoring response with mismatched DNS ID");
-        }
+        Ok(socket)
     }
 
     async fn resolve_tcp(&self, query: &[u8]) -> Result<Vec<u8>> {
@@ -136,47 +135,20 @@ impl Upstream {
     }
 }
 
-fn is_truncated(resp: &[u8]) -> bool {
-    resp.len() >= 3 && resp[2] & 0x02 != 0
-}
+/// Send `query` on a connected socket and wait for the response with a
+/// matching DNS ID, skipping stragglers from earlier queries.
+async fn udp_exchange(socket: &UdpSocket, query: &[u8]) -> Result<Vec<u8>> {
+    let id = query_id(query).context("query is not a parseable DNS message")?;
+    socket.send(query).await?;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn frame_roundtrip() {
-        let msg = vec![0xAB; 40];
-        let framed = encode_frame(&msg);
-        assert_eq!(framed.len(), 42);
-
-        let mut buf = framed[..3].to_vec();
-        assert_eq!(take_frame(&mut buf), Frame::Incomplete);
-
-        let mut buf = framed.clone();
-        match take_frame(&mut buf) {
-            Frame::Complete(m) => assert_eq!(m, msg),
-            other => panic!("expected complete frame, got {other:?}"),
+    let mut buf = vec![0u8; MAX_DNS_MESSAGE];
+    loop {
+        let n = socket.recv(&mut buf).await?;
+        // Responses must carry the query's DNS ID; anything else is a
+        // straggler from an earlier query still trickling in.
+        if query_id(&buf[..n]) == Some(id) {
+            return Ok(buf[..n].to_vec());
         }
-        assert!(buf.is_empty());
-
-        let mut buf = [framed.as_slice(), framed.as_slice()].concat();
-        assert_eq!(take_frame(&mut buf), Frame::Complete(msg.clone()));
-        assert_eq!(take_frame(&mut buf), Frame::Complete(msg));
-        assert!(buf.is_empty());
-    }
-
-    #[test]
-    fn frame_invalid_on_short_declared_length() {
-        let mut buf = vec![0u8, 5, 9, 9, 9, 9, 9];
-        assert_eq!(take_frame(&mut buf), Frame::Invalid);
-    }
-
-    #[test]
-    fn truncated_flag_detection() {
-        let resp = [0x12, 0x34, 0x82, 0x80, 0, 0, 0, 0, 0, 0, 0, 0];
-        assert!(is_truncated(&resp));
-        let resp = [0x12, 0x34, 0x80, 0x80, 0, 0, 0, 0, 0, 0, 0, 0];
-        assert!(!is_truncated(&resp));
+        debug!("ignoring response with mismatched DNS ID");
     }
 }

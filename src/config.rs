@@ -39,9 +39,6 @@ pub struct Cli {
     #[arg(long, default_value_t = 0)]
     pub max_session_secs: u64,
 
-    #[arg(long, default_value_t = 300)]
-    pub stats_interval_secs: u64,
-
     #[arg(long, default_value = "info")]
     pub log_level: String,
 
