@@ -59,6 +59,8 @@ Options:
 - `--cert FILE` / `--key FILE` — TLS certificate and key in PEM format,
   required.
 - `--idle-timeout-secs N` — QUIC idle timeout for DoQ, default 30.
+- `--metrics-listen ADDR` — address for the Prometheus metrics endpoint,
+  default `127.0.0.1:9153`. Set to `off` to disable.
 
 ## Docker
 
