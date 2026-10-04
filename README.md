@@ -37,13 +37,19 @@ Options:
 ## Docker
 
 ```
-docker build -t dnsshield .
+docker pull ghcr.io/championbuffalo1/dnsshield:latest
 
 docker run -d --name dnsshield \
     -p 853:853/tcp -p 853:853/udp \
     -v /etc/letsencrypt/live/dns.example.com:/certs:ro \
-    dnsshield \
+    ghcr.io/championbuffalo1/dnsshield:latest \
     --cert /certs/fullchain.pem --key /certs/privkey.pem
+```
+
+Or build it locally instead of pulling:
+
+```
+docker build -t dnsshield .
 ```
 
 The container runs as an unprivileged user with just
