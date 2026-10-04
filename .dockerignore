@@ -3,6 +3,8 @@ certs
 .git
 .gitignore
 README.md
-Dockerfile
+docker
+!docker/entrypoint.sh
 .dockerignore
 examples
+.github

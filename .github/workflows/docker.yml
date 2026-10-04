@@ -47,6 +47,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: docker/Dockerfile
           platforms: ${{ matrix.platform }}
           # no tags here; the merge job attaches them to the manifest list
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true

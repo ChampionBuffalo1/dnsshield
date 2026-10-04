@@ -25,11 +25,13 @@ RUN apt-get update \
     && useradd --system --no-create-home dnsshield
 
 COPY --from=build /src/target/release/dnsshield /usr/local/bin/dnsshield
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
-RUN setcap cap_net_bind_service=+ep /usr/local/bin/dnsshield
+RUN chmod +x /usr/local/bin/entrypoint.sh \
+    && setcap cap_net_bind_service=+ep /usr/local/bin/dnsshield
 
 USER dnsshield
 
-EXPOSE 853/tcp 853/udp
+EXPOSE 853/tcp 853/udp 443/tcp
 
-ENTRYPOINT ["dnsshield"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
