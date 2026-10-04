@@ -17,10 +17,6 @@ if [ -n "${DNSSHIELD_DOH_PORT:-}" ]; then
     set -- --doh-port "${DNSSHIELD_DOH_PORT}" "$@"
 fi
 
-if [ -n "${DNSSHIELD_PROTO:-}" ]; then
-    set -- --proto "${DNSSHIELD_PROTO}" "$@"
-fi
-
 if [ -n "${DNSSHIELD_UPSTREAM:-}" ]; then
     set -- --upstream "${DNSSHIELD_UPSTREAM}" "$@"
 fi
