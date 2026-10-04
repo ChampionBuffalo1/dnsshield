@@ -1,6 +1,3 @@
-//! Plain-DNS upstream: a pool of UDP sockets with a TCP fallback for
-//! truncated responses.
-
 use std::collections::VecDeque;
 use std::net::SocketAddr;
 use std::sync::Mutex;
@@ -38,7 +35,7 @@ impl PlainUpstream {
     pub async fn resolve(&self, query: &[u8]) -> Result<Vec<u8>> {
         for _ in 0..2 {
             match timeout(UDP_TIMEOUT, self.resolve_udp(query)).await {
-                Ok(Ok(resp)) if is_truncated(&resp) => break, // TC set: redo over TCP
+                Ok(Ok(resp)) if is_truncated(&resp) => break,
                 Ok(Ok(resp)) => return Ok(resp),
                 Ok(Err(e)) => debug!("upstream UDP attempt failed: {e}"),
                 Err(_) => debug!("upstream UDP attempt timed out"),

@@ -1,6 +1,3 @@
-//! DoH upstream: POSTs raw DNS messages to an RFC 8484 endpoint over
-//! HTTP/1.1 or HTTP/2 (negotiated via ALPN by hyper-rustls).
-
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -28,7 +25,6 @@ pub struct DohUpstream {
 
 impl DohUpstream {
     pub fn new(host: String, port: u16, path: String, tls: Arc<ClientConfig>) -> Result<Self> {
-        // Bare IPv6 literals need brackets to form a valid URI authority.
         let authority = if host.contains(':') {
             format!("[{host}]:{port}")
         } else {

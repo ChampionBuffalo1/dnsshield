@@ -1,9 +1,4 @@
 //! Runtime governance: connection admission control and log throttling.
-//!
-//! Observability (counters, gauges, latency, the periodic log summary)
-//! lives in [`crate::metrics`]; this module is the control plane that
-//! decides what gets in, plus the [`Throttle`] the observability side
-//! borrows to keep its own logging quiet.
 
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
@@ -214,8 +209,6 @@ impl Drop for ConnGuard {
     }
 }
 
-/// Everything both servers and the upstream need to police the system,
-/// bundled so it can be handed around as one `Arc`.
 pub struct Governance {
     pub limits: Limits,
     pub metrics: Arc<Metrics>,
@@ -284,7 +277,6 @@ mod tests {
             gate.try_acquire(peer(1), Proto::Doq).unwrap_err(),
             Rejection::PerIp
         );
-        // A different client is unaffected.
         let other_ip = SocketAddr::from(([203, 0, 113, 8], 9));
         assert!(gate.try_acquire(other_ip, Proto::Doq).is_ok());
     }
@@ -304,7 +296,6 @@ mod tests {
         assert_eq!(throttle.gate("k"), Some(0));
         assert_eq!(throttle.gate("k"), None);
         assert_eq!(throttle.gate("k"), None);
-        // Different keys are independent.
         assert_eq!(throttle.gate("other"), Some(0));
     }
 }

@@ -1,10 +1,5 @@
-//! Shared domain models: the protocol identifier, the downstream protocol
-//! set, and the upstream resolver specification.
-
 use std::net::SocketAddr;
 
-/// A protocol dnsshield can serve downstream. The single source of truth
-/// for protocol names — used for metric labels and logs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Proto {
     Dot,
@@ -13,10 +8,8 @@ pub enum Proto {
 }
 
 impl Proto {
-    /// Every protocol dnsshield knows, in stable order.
     pub const ALL: [Proto; 3] = [Proto::Dot, Proto::Doq, Proto::Doh];
 
-    /// Metric label and CLI-listing name (lowercase).
     pub fn as_str(self) -> &'static str {
         match self {
             Proto::Dot => "dot",
@@ -25,7 +18,6 @@ impl Proto {
         }
     }
 
-    /// Human-facing name for the startup banner.
     pub fn label(self) -> &'static str {
         match self {
             Proto::Dot => "DoT (TCP)",
@@ -37,11 +29,8 @@ impl Proto {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum UpstreamSpec {
-    /// Plain DNS over UDP (with TCP fallback for truncated responses).
     Udp(SocketAddr),
-    /// DNS-over-TLS.
     Dot { host: String, port: u16 },
-    /// DNS-over-HTTPS.
     Doh {
         host: String,
         port: u16,
@@ -52,7 +41,6 @@ pub enum UpstreamSpec {
 impl UpstreamSpec {
     fn split_host_port(s: &str, default_port: u16) -> Result<(String, u16), String> {
         let (host, port) = if let Some(rest) = s.strip_prefix('[') {
-            // IPv6 literal in brackets, optionally followed by :port.
             let (host, after) = rest
                 .split_once(']')
                 .ok_or_else(|| format!("unterminated '[' in {s:?}"))?;
@@ -98,7 +86,6 @@ impl std::str::FromStr for UpstreamSpec {
                 Some((authority, path)) => (authority, format!("/{path}")),
                 None => (rest, "/dns-query".to_string()),
             };
-            // Tolerate RFC 8484 URI templates like /dns-query{?dns}.
             if let Some(pos) = path.find("{?") {
                 path.truncate(pos);
             }
@@ -113,7 +100,6 @@ impl std::str::FromStr for UpstreamSpec {
                 "unknown upstream scheme {scheme:?}; expected udp://, tls://, or https://"
             ));
         }
-        // Bare form: IP literal only, for backward compatibility.
         let addr = s.parse::<SocketAddr>().map_err(|_| {
             "upstream must be IP:PORT, udp://IP:PORT, tls://HOST:PORT, or https://HOST/PATH \
              (the bare form requires an IP literal)"
@@ -179,7 +165,6 @@ mod tests {
             }
         );
 
-        // Default path, template suffix, and custom port all handled.
         let doh_default: UpstreamSpec = "https://dns.example.com".parse().unwrap();
         assert_eq!(
             doh_default,

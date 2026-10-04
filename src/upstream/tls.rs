@@ -1,5 +1,3 @@
-//! DoT upstream: one TLS connection per query, RFC 7858 length framing.
-
 use std::sync::Arc;
 
 use anyhow::{Context, Result, bail};

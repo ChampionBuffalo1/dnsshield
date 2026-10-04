@@ -1,6 +1,3 @@
-//! Upstream resolution: forwards parsed DNS queries to the configured
-//! resolver over plain UDP/TCP, DoT, or DoH.
-
 mod doh;
 mod plain;
 mod tls;
