@@ -47,21 +47,23 @@ cargo build --release
     --cert fullchain.pem \
     --key privkey.pem \
     --upstream 9.9.9.9:53 \
-    --listen 0.0.0.0:853 --listen '[::]:853' \
-    --https-listen 0.0.0.0:443 --https-listen '[::]:443'
+    --listen 0.0.0.0
 ```
+
+All protocols listen on `--listen` at their own ports: DoT (TCP) 853,
+DoQ (UDP) 853, DoH (TCP) 443. Set a port to `0` to disable that protocol.
 
 ## Options
 
 Every flag has an equivalent `DNSSHIELD_*` environment variable (used by the
-Docker image; CLI flags take precedence when both are set). The repeatable
-address options take a space-separated list as an environment variable.
+Docker image; CLI flags take precedence when both are set).
 
 | Option | Env var | What it does | Default |
 |---|---|---|---|
-| `--listen ADDR` | `DNSSHIELD_LISTEN` | Addresses to bind for DoT (TCP) and DoQ (UDP). Repeatable. | `0.0.0.0:853` + `[::]:853` |
-| `--https-listen ADDR` | `DNSSHIELD_HTTPS_LISTEN` | Addresses to bind for DoH (HTTPS over TCP). Repeatable. Only used when `doh` is in `--proto`. | `0.0.0.0:443` + `[::]:443` |
-| `--proto dot,doq,doh` | `DNSSHIELD_PROTO` | Downstream protocols to enable, comma-separated. Unknown values are rejected at startup. | `dot,doq,doh` |
+| `--listen IP` | `DNSSHIELD_LISTEN` | Host to bind every protocol on. | `0.0.0.0` |
+| `--dot-port PORT` | `DNSSHIELD_DOT_PORT` | Port for DoT (DNS-over-TLS, TCP). `0` disables. | `853` |
+| `--doq-port PORT` | `DNSSHIELD_DOQ_PORT` | Port for DoQ (DNS-over-QUIC, UDP). `0` disables. | `853` |
+| `--doh-port PORT` | `DNSSHIELD_DOH_PORT` | Port for DoH (DNS-over-HTTPS, TCP). `0` disables. | `443` |
 | `--upstream URL` | `DNSSHIELD_UPSTREAM` | Upstream resolver: plain `IP:PORT` (or `udp://IP:PORT`), `tls://HOST:PORT` for DoT, or `https://HOST/PATH` for DoH. Bare form requires an IP literal. Upstream certificates are always verified against Mozilla's public roots. | `1.1.1.1:53` |
 | `--cert FILE` | `DNSSHIELD_CERT` | TLS certificate in PEM format. | (required) |
 | `--key FILE` | `DNSSHIELD_KEY` | TLS private key in PEM format. | (required) |
@@ -75,8 +77,9 @@ address options take a space-separated list as an environment variable.
 
 Examples:
 
-- `--proto dot` runs a DoT-only server (no UDP, no HTTPS listener).
-- `--proto doq,doh` skips the DoT TCP listener.
+- `--dot-port 0` disables DoT (no TCP listener on 853).
+- `--doq-port 0 --doh-port 0` runs a DoT-only server.
+- `--doh-port 8443` serves DoH on an alternate port.
 
 `RUST_LOG` (via `tracing`'s env filter) also overrides `--log-level` if set.
 
@@ -102,4 +105,4 @@ The container runs as an unprivileged user with just
 cert files it mounts are readable by that user. On rootless Docker the
 capability gets dropped, so listen on high ports instead:
 `-p 853:8853/tcp -p 853:8853/udp -p 443:9443/tcp` plus
-`--listen 0.0.0.0:8853 --https-listen 0.0.0.0:9443`.
+`--listen 0.0.0.0 --dot-port 8853 --doq-port 8853 --doh-port 9443`.
