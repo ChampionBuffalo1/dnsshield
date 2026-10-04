@@ -25,8 +25,7 @@ sequenceDiagram
 
 ## Building
 
-Needs Rust, cmake, and a C compiler (the QUIC and TLS libraries build C
-code).
+Needs Rust, cmake, and a C compiler.
 
 ```
 cargo build --release
@@ -73,8 +72,6 @@ Examples:
 - `--doq-port 0 --doh-port 0` runs a DoT-only server.
 - `--doh-port 8443` serves DoH on an alternate port.
 
-`RUST_LOG` (via `tracing`'s env filter) also overrides `--log-level` if set.
-
 ## Upstream resolver
 
 `--upstream` picks the upstream protocol by URL scheme — no separate mode
@@ -88,19 +85,14 @@ flag needed:
 
 ## Docker
 
-```
-docker pull ghcr.io/championbuffalo1/dnsshield:latest
+```bash
+$ docker pull ghcr.io/championbuffalo1/dnsshield:latest
 
-docker run -d --name dnsshield \
+$ docker run -d --name dnsshield \
     -p 853:853/tcp -p 853:853/udp -p 443:443/tcp \
     -v /etc/letsencrypt/live/dns.example.com:/certs:ro \
     ghcr.io/championbuffalo1/dnsshield:latest \
     --cert /certs/fullchain.pem --key /certs/privkey.pem
-```
-
-
-```
-docker build -f docker/Dockerfile .
 ```
 
 The container runs as an unprivileged user with just
