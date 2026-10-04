@@ -26,6 +26,7 @@ RUN apt-get update \
 
 COPY --from=build /src/target/release/dnsshield /usr/local/bin/dnsshield
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY LICENSE /usr/share/doc/dnsshield/LICENSE
 
 RUN chmod +x /usr/local/bin/entrypoint.sh \
     && setcap cap_net_bind_service=+ep /usr/local/bin/dnsshield
