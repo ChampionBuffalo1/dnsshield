@@ -12,7 +12,8 @@ use std::time::{Duration, Instant};
 
 use tracing::info;
 
-use crate::metrics::{Metrics, Proto};
+use crate::metrics::Metrics;
+use crate::model::Proto;
 
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {

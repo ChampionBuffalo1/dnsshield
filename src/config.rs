@@ -1,22 +1,26 @@
 use clap::Parser;
-use std::net::SocketAddr;
+use std::net::IpAddr;
 use std::path::PathBuf;
 
-fn default_listen() -> Vec<SocketAddr> {
-    vec![
-        SocketAddr::from(([0, 0, 0, 0], 853)),
-        SocketAddr::from(([0, 0, 0, 0, 0, 0, 0, 0], 853)),
-    ]
-}
+use crate::model::UpstreamSpec;
 
 #[derive(Debug, Parser)]
 #[command(name = "dnsshield", version, about)]
 pub struct Cli {
-    #[arg(long, value_name = "ADDR", default_values_t = default_listen())]
-    pub listen: Vec<SocketAddr>,
+    #[arg(long, value_name = "IP", default_value = "0.0.0.0")]
+    pub listen: IpAddr,
 
-    #[arg(long, default_value = "1.1.1.1:53")]
-    pub upstream: SocketAddr,
+    #[arg(long, value_name = "PORT", default_value_t = 853)]
+    pub dot_port: u16,
+
+    #[arg(long, value_name = "PORT", default_value_t = 853)]
+    pub doq_port: u16,
+
+    #[arg(long, value_name = "PORT", default_value_t = 443)]
+    pub doh_port: u16,
+
+    #[arg(long, value_name = "URL", default_value = "1.1.1.1:53")]
+    pub upstream: UpstreamSpec,
 
     #[arg(long, value_name = "FILE")]
     pub cert: PathBuf,

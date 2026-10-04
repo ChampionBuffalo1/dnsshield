@@ -8,20 +8,7 @@ use prometheus::{
 };
 use prometheus_hyper::Server;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Proto {
-    Dot,
-    Doq,
-}
-
-impl Proto {
-    pub fn as_str(self) -> &'static str {
-        match self {
-            Proto::Dot => "dot",
-            Proto::Doq => "doq",
-        }
-    }
-}
+use crate::model::Proto;
 
 const LATENCY_BUCKETS: &[f64] = &[
     0.001, 0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
@@ -124,13 +111,14 @@ impl Metrics {
                 .unwrap_or(0),
         );
 
-        for proto in ["dot", "doq"] {
-            queries.with_label_values(&[proto]).get();
-            answered.with_label_values(&[proto]).get();
-            servfails.with_label_values(&[proto]).get();
-            rejected.with_label_values(&[proto]).get();
-            active.with_label_values(&[proto]).get();
-            peak.with_label_values(&[proto]).get();
+        for proto in Proto::ALL {
+            let name = proto.as_str();
+            queries.with_label_values(&[name]).get();
+            answered.with_label_values(&[name]).get();
+            servfails.with_label_values(&[name]).get();
+            rejected.with_label_values(&[name]).get();
+            active.with_label_values(&[name]).get();
+            peak.with_label_values(&[name]).get();
         }
 
         Ok(Self {

@@ -16,9 +16,9 @@ use tokio_quiche::settings::{CertificateKind, Hooks, QuicSettings, TlsCertificat
 use tokio_quiche::{ApplicationOverQuic, ConnectionParams, QuicConnectionStream, QuicResult};
 use tracing::{debug, info, warn};
 
-use crate::dns::Upstream;
 use crate::limits::{ConnGuard, Governance};
-use crate::metrics::Proto;
+use crate::model::Proto;
+use crate::upstream::Upstream;
 use crate::util::{Frame, describe_query, encode_frame, rcode_name, servfail, take_frame};
 
 const DOQ_ALPN: &[u8] = b"doq";

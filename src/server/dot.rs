@@ -13,12 +13,16 @@ use tokio_rustls::TlsAcceptor;
 use tokio_rustls::server::TlsStream;
 use tracing::{info, warn};
 
-use crate::dns::Upstream;
 use crate::limits::{ConnGuard, Governance};
-use crate::metrics::Proto;
+use crate::model::Proto;
+use crate::upstream::Upstream;
 use crate::util::{Frame, describe_query, encode_frame, rcode_name, servfail, take_frame};
 
-pub fn acceptor(cert_path: &Path, key_path: &Path) -> Result<TlsAcceptor> {
+pub(crate) fn server_config(
+    cert_path: &Path,
+    key_path: &Path,
+    alpn: &[&[u8]],
+) -> Result<ServerConfig> {
     let certs: Vec<CertificateDer> = CertificateDer::pem_file_iter(cert_path)
         .with_context(|| format!("failed to read {}", cert_path.display()))?
         .collect::<Result<_, _>>()
@@ -26,29 +30,27 @@ pub fn acceptor(cert_path: &Path, key_path: &Path) -> Result<TlsAcceptor> {
     let key = PrivateKeyDer::from_pem_file(key_path)
         .with_context(|| format!("failed to read {}", key_path.display()))?;
 
-    // RFC 7858 defines no ALPN for DoT.
-    let config = ServerConfig::builder()
+    let mut config = ServerConfig::builder()
         .with_no_client_auth()
         .with_single_cert(certs, key)
         .context("invalid certificate/key pair")?;
+    config.alpn_protocols = alpn.iter().map(|p| p.to_vec()).collect();
+    Ok(config)
+}
+
+pub fn acceptor(cert_path: &Path, key_path: &Path) -> Result<TlsAcceptor> {
+    // RFC 7858 defines no ALPN for DoT.
+    let config = server_config(cert_path, key_path, &[])?;
     Ok(TlsAcceptor::from(Arc::new(config)))
 }
 
 pub async fn serve(
-    listeners: Vec<TcpListener>,
+    listener: TcpListener,
     acceptor: TlsAcceptor,
     upstream: Arc<Upstream>,
     gov: Arc<Governance>,
 ) {
-    for listener in listeners {
-        let acceptor = acceptor.clone();
-        let upstream = Arc::clone(&upstream);
-        let gov = Arc::clone(&gov);
-        tokio::spawn(async move {
-            accept_loop(listener, acceptor, upstream, gov).await;
-        });
-    }
-    std::future::pending::<()>().await;
+    accept_loop(listener, acceptor, upstream, gov).await;
 }
 
 async fn accept_loop(
