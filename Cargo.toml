@@ -10,6 +10,14 @@ tokio-quiche = "0.20.0"
 tokio-rustls = "0.26"
 rustls = "0.23"
 hickory-proto = "0.26"
+hyper = { version = "1.7", features = ["client", "http1", "http2", "server"] }
+hyper-rustls = { version = "0.27", default-features = false, features = ["http1", "http2", "tls12", "aws-lc-rs"] }
+hyper-util = { version = "0.1", features = ["client", "client-legacy", "server", "http1", "http2", "tokio"] }
+http-body-util = "0.1"
+http = "1"
+bytes = "1"
+base64 = "0.23"
+webpki-roots = "0.26"
 clap = { version = "4.5", features = ["derive"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
