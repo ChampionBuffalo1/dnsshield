@@ -2,7 +2,8 @@
 
 A small encrypted DNS forwarding server. It speaks DNS-over-TLS (DoT),
 DNS-over-QUIC (DoQ) on port 853, and DNS-over-HTTPS (DoH) on port 443, and
-forwards queries to a plain-DNS resolver like PiHole, 1.1.1.1 etc.
+forwards queries to an upstream resolver — plain DNS, DoT, or DoH — such as
+PiHole, 1.1.1.1 etc.
 
 ```mermaid
 sequenceDiagram
@@ -25,7 +26,7 @@ sequenceDiagram
 Point `--upstream` at the Pi-hole instead of a public resolver:
 
 ```
---upstream 191.168.1.2:53
+--upstream 192.168.1.2:53
 ```
 
 Only clients with the cert will be able to use it, so the Pi-hole stays
@@ -53,6 +54,33 @@ cargo build --release
 All protocols listen on `--listen` at their own ports: DoT (TCP) 853,
 DoQ (UDP) 853, DoH (TCP) 443. Set a port to `0` to disable that protocol.
 
+## Upstream resolver
+
+`--upstream` picks the upstream protocol by URL scheme — no separate mode
+flag needed:
+
+| Scheme | Protocol | Default port | Example |
+|---|---|---|---|
+| *(bare)* `IP:PORT` | Plain DNS (UDP) | — | `1.1.1.1:53` |
+| `udp://IP:PORT` | Plain DNS (UDP) | — | `udp://192.168.1.2:53` |
+| `tls://HOST[:PORT]` | DNS-over-TLS | 853 | `tls://dns.quad9.net` |
+| `https://HOST[:PORT][/PATH]` | DNS-over-HTTPS | 443 | `https://dns.quad9.net/dns-query` |
+
+Notes:
+
+- The bare form requires an IP literal; hostnames need a scheme. IPv6
+  literals go in brackets: `tls://[2001:db8::1]:853`.
+- DoH paths default to `/dns-query`; RFC 8484 URI templates like
+  `/dns-query{?dns}` (from resolver discovery) are accepted and stripped.
+- Plain-UDP upstreams fall back to TCP when a response is truncated.
+- Upstream TLS certificates are always verified against Mozilla's public
+  roots — there is no skip-verify option.
+- Plaintext `http://` DoH and DNS-over-QUIC (`quic://`) upstreams are not
+  supported. QUIC is available on the client-facing side only.
+- One upstream per instance: a single exchange times out after 3 seconds,
+  and persistent failures are logged as `upstream-down` /
+  `upstream-recovered` (visible in the metrics endpoint).
+
 ## Options
 
 Every flag has an equivalent `DNSSHIELD_*` environment variable (used by the
@@ -64,7 +92,7 @@ Docker image; CLI flags take precedence when both are set).
 | `--dot-port PORT` | `DNSSHIELD_DOT_PORT` | Port for DoT (DNS-over-TLS, TCP). `0` disables. | `853` |
 | `--doq-port PORT` | `DNSSHIELD_DOQ_PORT` | Port for DoQ (DNS-over-QUIC, UDP). `0` disables. | `853` |
 | `--doh-port PORT` | `DNSSHIELD_DOH_PORT` | Port for DoH (DNS-over-HTTPS, TCP). `0` disables. | `443` |
-| `--upstream URL` | `DNSSHIELD_UPSTREAM` | Upstream resolver: plain `IP:PORT` (or `udp://IP:PORT`), `tls://HOST:PORT` for DoT, or `https://HOST/PATH` for DoH. Bare form requires an IP literal. Upstream certificates are always verified against Mozilla's public roots. | `1.1.1.1:53` |
+| `--upstream URL` | `DNSSHIELD_UPSTREAM` | Upstream resolver, selected by scheme (plain UDP, `tls://`, `https://`). See [Upstream resolver](#upstream-resolver). | `1.1.1.1:53` |
 | `--cert FILE` | `DNSSHIELD_CERT` | TLS certificate in PEM format. | (required) |
 | `--key FILE` | `DNSSHIELD_KEY` | TLS private key in PEM format. | (required) |
 | `--idle-timeout-secs N` | `DNSSHIELD_IDLE_TIMEOUT_SECS` | Close DoT/DoQ connections idle for this long. | `30` |
